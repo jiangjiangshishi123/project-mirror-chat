@@ -40,59 +40,59 @@ export const ChatInputBox = ({ onSend, disabled }: ChatInputBoxProps) => {
   };
 
   return (
-    <div className="bg-card border border-border rounded-2xl shadow-lg">
-      <div className="p-4">
+    <div className="bg-card/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-lg transition-all duration-200 hover:shadow-xl hover:border-border">
+      <div className="p-4 pb-2">
         <Textarea
           ref={textareaRef}
           value={message}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder="Ask Z.ai anything..."
+          placeholder="向 Z.ai 提问..."
           disabled={disabled}
-          className="min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 text-base"
+          className="min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 text-base placeholder:text-muted-foreground/60"
           rows={1}
         />
       </div>
 
-      <div className="flex items-center justify-between px-4 pb-4">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between px-4 pb-3">
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-lg h-8 w-8 p-0"
           >
             <Paperclip size={18} />
           </Button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-muted rounded-full p-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center bg-muted/50 rounded-full p-0.5">
             <button
               type="button"
               onClick={() => setMode("search")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
                 mode === "search"
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Search size={14} />
-              <span>Search</span>
+              <span>搜索</span>
             </button>
             <button
               type="button"
               onClick={() => setMode("think")}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all",
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
                 mode === "think"
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Brain size={14} />
-              <span>Deep Think</span>
+              <span>深度思考</span>
             </button>
           </div>
 
@@ -101,7 +101,7 @@ export const ChatInputBox = ({ onSend, disabled }: ChatInputBoxProps) => {
             onClick={handleSubmit}
             disabled={!message.trim() || disabled}
             size="icon"
-            className="rounded-full h-9 w-9"
+            className="rounded-full h-9 w-9 bg-primary hover:bg-primary/90 shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-40"
           >
             <Send size={16} />
           </Button>
