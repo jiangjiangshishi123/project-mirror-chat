@@ -1,27 +1,22 @@
 import { useState, useRef } from "react";
-import { Plus, Search, Sparkles, Send, Paperclip } from "lucide-react";
+import { Plus, Search, Brain, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
-  onSend: (message: string, mode: "search" | "think") => void;
+  onSend: (message: string, options: { search: boolean; think: boolean }) => void;
 }
 
 export const ChatInput = ({ onSend }: ChatInputProps) => {
   const [message, setMessage] = useState("");
-  const [mode, setMode] = useState<"search" | "think">("search");
-  const [advancedSearch, setAdvancedSearch] = useState(false);
+  const [searchEnabled, setSearchEnabled] = useState(false);
+  const [thinkEnabled, setThinkEnabled] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
     if (message.trim()) {
-      onSend(message, mode);
+      onSend(message, { search: searchEnabled, think: thinkEnabled });
       setMessage("");
     }
   };
@@ -48,7 +43,7 @@ export const ChatInput = ({ onSend }: ChatInputProps) => {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask Z.ai anything..."
+            placeholder="向 Z.ai 提问..."
             className="w-full min-h-[120px] p-4 pb-2 bg-transparent resize-none outline-none text-foreground placeholder:text-muted-foreground"
             rows={3}
           />
@@ -57,7 +52,7 @@ export const ChatInput = ({ onSend }: ChatInputProps) => {
           {files.length > 0 && (
             <div className="px-4 pb-2">
               <span className="text-sm text-muted-foreground">
-                Files: {files.map(f => f.name).join(", ")}
+                文件: {files.map(f => f.name).join(", ")}
               </span>
             </div>
           )}
@@ -82,53 +77,35 @@ export const ChatInput = ({ onSend }: ChatInputProps) => {
                 onChange={handleFileChange}
               />
 
-              {/* Search mode button */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant={mode === "search" ? "secondary" : "ghost"}
-                    size="sm"
-                    className="gap-1.5 h-8"
-                    onClick={() => setMode("search")}
-                  >
-                    <Search className="h-4 w-4" />
-                    Search
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72" align="start">
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <div className="font-medium">Search</div>
-                      <p className="text-sm text-muted-foreground">
-                        Single-round search, quickly get information
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <div className="font-medium">Advanced Search</div>
-                        <p className="text-sm text-muted-foreground">
-                          Multi-round search, in-depth research and analysis
-                        </p>
-                      </div>
-                      <Switch
-                        checked={advancedSearch}
-                        onCheckedChange={setAdvancedSearch}
-                      />
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              {/* Deep Think mode button */}
-              <Button
-                variant={mode === "think" ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-1.5 h-8"
-                onClick={() => setMode("think")}
+              {/* Search toggle */}
+              <button
+                type="button"
+                onClick={() => setSearchEnabled(!searchEnabled)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border",
+                  searchEnabled
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "text-muted-foreground hover:text-foreground border-transparent hover:bg-muted/50"
+                )}
               >
-                <Sparkles className="h-4 w-4" />
-                Deep Think
-              </Button>
+                <Search className="h-4 w-4" />
+                搜索
+              </button>
+
+              {/* Deep Think toggle */}
+              <button
+                type="button"
+                onClick={() => setThinkEnabled(!thinkEnabled)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border",
+                  thinkEnabled
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "text-muted-foreground hover:text-foreground border-transparent hover:bg-muted/50"
+                )}
+              >
+                <Brain className="h-4 w-4" />
+                深度思考
+              </button>
             </div>
 
             {/* Send button */}
@@ -142,13 +119,6 @@ export const ChatInput = ({ onSend }: ChatInputProps) => {
             </Button>
           </div>
         </div>
-      </div>
-
-      {/* File upload hint */}
-      <div className="flex justify-center mt-2">
-        <span className="text-sm text-muted-foreground">
-          Files: {files.length > 0 ? files.length + " selected" : "No file chosen"}
-        </span>
       </div>
     </div>
   );
