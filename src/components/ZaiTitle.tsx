@@ -1,26 +1,27 @@
-import { useEffect, useState } from "react";
+import logo from "@/assets/logo.png";
 
-export const ZaiTitle = () => {
-  const fullText = "Hi, I'm Z.ai";
-  const [displayText, setDisplayText] = useState(fullText);
-  const [isAnimating, setIsAnimating] = useState(true);
+interface ZaiTitleProps {
+  showText?: boolean;
+  size?: "sm" | "md" | "lg";
+}
 
-  useEffect(() => {
-    // Start with animation after a brief delay
-    const timer = setTimeout(() => {
-      setIsAnimating(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, []);
+export const ZaiTitle = ({ showText = false, size = "md" }: ZaiTitleProps) => {
+  const sizeClasses = {
+    sm: "h-6",
+    md: "h-8",
+    lg: "h-12",
+  };
 
   return (
-    <div className="text-center">
-      <h1 className="text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight">
-        <span className="zai-title-gradient">
-          {displayText}
-        </span>
-      </h1>
+    <div className="flex items-center gap-2">
+      <img 
+        src={logo} 
+        alt="RICOH InnoAI Hub" 
+        className={sizeClasses[size]}
+      />
+      {showText && (
+        <span className="text-xl font-semibold text-foreground">RICOH InnoAI Hub</span>
+      )}
     </div>
   );
 };
