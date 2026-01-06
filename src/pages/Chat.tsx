@@ -130,7 +130,7 @@ const Chat = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ messages: apiMessages, model: selectedModel }),
+          body: JSON.stringify({ messages: apiMessages, model: selectedModel, mode }),
         }
       );
 
