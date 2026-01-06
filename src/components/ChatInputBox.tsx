@@ -1,15 +1,17 @@
 import { useState, useRef } from "react";
-import { Send, Search, Brain, Paperclip } from "lucide-react";
+import { Send, Search, Brain, Paperclip, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 interface ChatInputBoxProps {
   onSend: (message: string, options: { search: boolean; think: boolean }) => void;
+  onStop?: () => void;
   disabled?: boolean;
+  isStreaming?: boolean;
 }
 
-export const ChatInputBox = ({ onSend, disabled }: ChatInputBoxProps) => {
+export const ChatInputBox = ({ onSend, onStop, disabled, isStreaming }: ChatInputBoxProps) => {
   const [message, setMessage] = useState("");
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [thinkEnabled, setThinkEnabled] = useState(true); // Default on
@@ -125,15 +127,26 @@ export const ChatInputBox = ({ onSend, disabled }: ChatInputBoxProps) => {
             <span>深度思考</span>
           </button>
 
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!message.trim() || disabled}
-            size="icon"
-            className="rounded-full h-9 w-9 bg-primary hover:bg-primary/90 shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-40"
-          >
-            <Send size={16} />
-          </Button>
+          {isStreaming ? (
+            <Button
+              type="button"
+              onClick={onStop}
+              size="icon"
+              className="rounded-full h-9 w-9 bg-destructive hover:bg-destructive/90 shadow-md transition-all duration-200 hover:shadow-lg"
+            >
+              <Square size={14} className="fill-current" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!message.trim() || disabled}
+              size="icon"
+              className="rounded-full h-9 w-9 bg-primary hover:bg-primary/90 shadow-md transition-all duration-200 hover:shadow-lg disabled:opacity-40"
+            >
+              <Send size={16} />
+            </Button>
+          )}
         </div>
       </div>
     </div>
