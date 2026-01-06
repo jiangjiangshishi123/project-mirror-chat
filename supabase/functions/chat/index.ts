@@ -11,22 +11,15 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, model, mode } = await req.json();
+    const { messages, search, think } = await req.json();
     const ZHIPU_API_KEY = Deno.env.get("ZHIPU_API_KEY");
     
     if (!ZHIPU_API_KEY) {
       throw new Error("ZHIPU_API_KEY is not configured");
     }
 
-    // Map model names to Zhipu models
-    const modelMap: Record<string, string> = {
-      "glm-4.7": "glm-4.7",
-      "glm-4-flash": "glm-4-flash",
-      "glm-4-plus": "glm-4-plus",
-      "glm-4-0520": "glm-4-0520",
-    };
-
-    const selectedModel = modelMap[model] || "glm-4.7";
+    // Always use glm-4.7 model
+    const selectedModel = "glm-4.7";
 
     const systemPrompt = `你是 Z.ai，一个由智谱AI创建的智能、友好的AI助手。
 你可以帮助用户完成各种任务，包括：
@@ -37,15 +30,12 @@ serve(async (req) => {
 
 请始终保持专业而友好的语气，提供准确有用的回答。`;
 
-    // If search mode, first perform web search
+    // If search enabled, first perform web search
     let searchContext = "";
-    if (mode === "search") {
+    if (search) {
       const lastMessage = messages[messages.length - 1]?.content || "";
-      // Extract actual query from the formatted message
-      const queryMatch = lastMessage.match(/\[Search Mode\].*?: (.+)/);
-      const searchQuery = queryMatch ? queryMatch[1] : lastMessage;
       
-      console.log("Performing web search for:", searchQuery);
+      console.log("Performing web search for:", lastMessage);
       
       try {
         const searchResponse = await fetch("https://open.bigmodel.cn/api/paas/v4/web_search", {
@@ -55,7 +45,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            search_query: searchQuery,
+            search_query: lastMessage,
             search_engine: "search_std",
             count: 5,
             content_size: "medium",
@@ -82,12 +72,9 @@ serve(async (req) => {
     // Prepare messages with search context
     const processedMessages = messages.map((m: any, i: number) => {
       if (i === messages.length - 1 && searchContext) {
-        // Clean up the search mode prefix and add search results
-        let content = m.content.replace(/\[Search Mode\].*?: /, "");
-        return { ...m, content: content + searchContext };
+        return { ...m, content: m.content + searchContext };
       }
-      // Clean up any mode prefixes
-      return { ...m, content: m.content.replace(/\[(Deep Think Mode|Search Mode)\].*?: /, "") };
+      return m;
     });
 
     // Build request body
@@ -102,15 +89,15 @@ serve(async (req) => {
       top_p: 0.95,
     };
 
-    // Enable thinking mode for deep think
-    if (mode === "think") {
+    // Enable thinking mode when think is enabled
+    if (think) {
       requestBody.thinking = {
         type: "enabled",
         clear_thinking: false,
       };
     }
 
-    console.log("Calling Zhipu API with model:", selectedModel, "mode:", mode);
+    console.log("Calling Zhipu API with model:", selectedModel, "search:", search, "think:", think);
 
     const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
       method: "POST",

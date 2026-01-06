@@ -12,13 +12,12 @@ import { toast } from "@/hooks/use-toast";
 const Index = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [selectedModel, setSelectedModel] = useState("glm-4.7");
 
-  const handleSend = async (message: string, mode: "search" | "think") => {
+  const handleSend = async (message: string, options: { search: boolean; think: boolean }) => {
     if (!user) {
       toast({
-        title: "Please sign in",
-        description: "You need to sign in to start a conversation",
+        title: "请先登录",
+        description: "您需要登录才能开始对话",
       });
       navigate("/auth");
       return;
@@ -30,15 +29,15 @@ const Index = () => {
       .insert({
         user_id: user.id,
         title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
-        model: selectedModel,
+        model: "glm-4.7",
       })
       .select()
       .single();
 
     if (error) {
       toast({
-        title: "Error",
-        description: "Failed to create conversation",
+        title: "错误",
+        description: "创建会话失败",
         variant: "destructive",
       });
       return;
@@ -72,10 +71,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header 
-        selectedModel={selectedModel} 
-        onModelChange={setSelectedModel} 
-      />
+      <Header />
       
       <main className="flex-1 flex flex-col items-center justify-center px-4 pt-16 pb-20">
         <div className="w-full max-w-4xl space-y-8">

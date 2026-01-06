@@ -1,4 +1,4 @@
-import { User, Bot, Copy, Check } from "lucide-react";
+import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,10 @@ interface ChatMessageProps {
   message: {
     role: "user" | "assistant";
     content: string;
+    thinking?: string;
   };
+  onRegenerate?: () => void;
+  isLast?: boolean;
 }
 
 // Simple markdown renderer
@@ -65,9 +68,10 @@ const renderMarkdown = (content: string) => {
   });
 };
 
-export const ChatMessage = ({ message }: ChatMessageProps) => {
+export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps) => {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(message.content);
@@ -96,6 +100,25 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
 
       {/* Message Content */}
       <div className={cn("flex flex-col gap-1 max-w-[85%]", isUser && "items-end")}>
+        {/* Thinking process for assistant */}
+        {!isUser && message.thinking && (
+          <div className="w-full mb-2">
+            <button
+              onClick={() => setThinkingExpanded(!thinkingExpanded)}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Brain className="w-4 h-4" />
+              <span>思考过程</span>
+              {thinkingExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {thinkingExpanded && (
+              <div className="mt-2 p-3 bg-muted/30 rounded-lg border border-border/50 text-sm text-muted-foreground">
+                {renderMarkdown(message.thinking)}
+              </div>
+            )}
+          </div>
+        )}
+
         <div
           className={cn(
             "rounded-2xl px-4 py-3 shadow-sm",
@@ -115,28 +138,45 @@ export const ChatMessage = ({ message }: ChatMessageProps) => {
           )}
         </div>
 
-        {/* Copy button for assistant messages */}
+        {/* Action buttons for assistant messages */}
         {!isUser && message.content && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleCopy}
-            className="opacity-0 group-hover:opacity-100 transition-opacity h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-          >
-            {copied ? (
-              <>
-                <Check size={12} className="mr-1" />
-                已复制
-              </>
-            ) : (
-              <>
-                <Copy size={12} className="mr-1" />
-                复制
-              </>
+          <div className="flex items-center gap-1 mt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopy}
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {copied ? (
+                <>
+                  <Check size={12} className="mr-1" />
+                  已复制
+                </>
+              ) : (
+                <>
+                  <Copy size={12} className="mr-1" />
+                  复制
+                </>
+              )}
+            </Button>
+            
+            {isLast && onRegenerate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onRegenerate}
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <RefreshCw size={12} className="mr-1" />
+                重新生成
+              </Button>
             )}
-          </Button>
+          </div>
         )}
       </div>
     </div>
   );
 };
+
+// Import Brain icon at the top
+import { Brain } from "lucide-react";

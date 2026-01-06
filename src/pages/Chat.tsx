@@ -5,12 +5,12 @@ import { Header } from "@/components/Header";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInputBox } from "@/components/ChatInputBox";
 import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  thinking?: string;
 }
 
 const Chat = () => {
@@ -18,8 +18,8 @@ const Chat = () => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState("glm-4.7");
   const [conversationTitle, setConversationTitle] = useState("New Chat");
+  const [lastUserMessage, setLastUserMessage] = useState<{ message: string; options: { search: boolean; think: boolean } } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,8 +43,8 @@ const Chat = () => {
 
     if (convError || !conversation) {
       toast({
-        title: "Error",
-        description: "Failed to load conversation",
+        title: "错误",
+        description: "加载会话失败",
         variant: "destructive",
       });
       navigate("/");
@@ -52,7 +52,6 @@ const Chat = () => {
     }
 
     setConversationTitle(conversation.title);
-    setSelectedModel(conversation.model);
 
     const { data: msgs, error: msgsError } = await supabase
       .from("messages")
@@ -74,8 +73,10 @@ const Chat = () => {
     );
   };
 
-  const handleSend = async (message: string, mode: "search" | "think") => {
+  const handleSend = async (message: string, options: { search: boolean; think: boolean }) => {
     if (!message.trim()) return;
+
+    setLastUserMessage({ message, options });
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -106,100 +107,12 @@ const Chat = () => {
         }
       }
 
-      // Prepare messages for API
-      const apiMessages = [...messages, userMessage].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
-      // Add mode context
-      if (mode === "think") {
-        apiMessages[apiMessages.length - 1].content = 
-          `[Deep Think Mode] Please analyze this carefully and provide a thorough response: ${message}`;
-      } else if (mode === "search") {
-        apiMessages[apiMessages.length - 1].content = 
-          `[Search Mode] Please find and synthesize relevant information about: ${message}`;
-      }
-
-      // Stream response
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ messages: apiMessages, model: selectedModel, mode }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to get response");
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let assistantContent = "";
-      const assistantId = crypto.randomUUID();
-
-      // Add empty assistant message
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantId, role: "assistant", content: "" },
-      ]);
-
-      let buffer = "";
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: assistantContent } : m
-                )
-              );
-            }
-          } catch {
-            buffer = line + "\n" + buffer;
-            break;
-          }
-        }
-      }
-
-      // Save assistant message to database
-      if (conversationId && assistantContent) {
-        await supabase.from("messages").insert({
-          conversation_id: conversationId,
-          role: "assistant",
-          content: assistantContent,
-        });
-      }
+      await streamResponse(message, options);
     } catch (error: any) {
       console.error("Chat error:", error);
       toast({
-        title: "Error",
-        description: error.message || "Failed to get response",
+        title: "错误",
+        description: error.message || "获取回复失败",
         variant: "destructive",
       });
       // Remove failed assistant message
@@ -209,9 +122,161 @@ const Chat = () => {
     }
   };
 
+  const streamResponse = async (message: string, options: { search: boolean; think: boolean }) => {
+    // Prepare messages for API
+    const apiMessages = messages
+      .filter((m) => m.content) // Filter out empty messages
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+    
+    apiMessages.push({ role: "user", content: message });
+
+    // Stream response
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ 
+          messages: apiMessages, 
+          model: "glm-4.7",
+          search: options.search,
+          think: options.think,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "获取回复失败");
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let assistantContent = "";
+    let thinkingContent = "";
+    const assistantId = crypto.randomUUID();
+
+    // Add empty assistant message
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: "assistant", content: "", thinking: "" },
+    ]);
+
+    let buffer = "";
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let newlineIndex: number;
+      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+        let line = buffer.slice(0, newlineIndex);
+        buffer = buffer.slice(newlineIndex + 1);
+
+        if (line.endsWith("\r")) line = line.slice(0, -1);
+        if (line.startsWith(":") || line.trim() === "") continue;
+        if (!line.startsWith("data: ")) continue;
+
+        const jsonStr = line.slice(6).trim();
+        if (jsonStr === "[DONE]") break;
+
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const choices = parsed.choices || [];
+          
+          for (const choice of choices) {
+            const delta = choice.delta || {};
+            
+            // Handle thinking content
+            if (delta.reasoning_content) {
+              thinkingContent += delta.reasoning_content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, thinking: thinkingContent } : m
+                )
+              );
+            }
+            
+            // Handle regular content
+            if (delta.content) {
+              assistantContent += delta.content;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId ? { ...m, content: assistantContent } : m
+                )
+              );
+            }
+          }
+        } catch {
+          buffer = line + "\n" + buffer;
+          break;
+        }
+      }
+    }
+
+    // Save assistant message to database
+    if (conversationId && assistantContent) {
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        role: "assistant",
+        content: assistantContent,
+      });
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!lastUserMessage) return;
+    
+    // Remove the last assistant message
+    setMessages((prev) => {
+      const reversedIndex = [...prev].reverse().findIndex((m) => m.role === "assistant");
+      if (reversedIndex !== -1) {
+        const lastAssistantIndex = prev.length - 1 - reversedIndex;
+        return prev.slice(0, lastAssistantIndex);
+      }
+      return prev;
+    });
+    
+    // Delete the last assistant message from database
+    if (conversationId) {
+      const { data: msgs } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", conversationId)
+        .eq("role", "assistant")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      
+      if (msgs && msgs.length > 0) {
+        await supabase.from("messages").delete().eq("id", msgs[0].id);
+      }
+    }
+    
+    setIsLoading(true);
+    try {
+      await streamResponse(lastUserMessage.message, lastUserMessage.options);
+    } catch (error: any) {
+      console.error("Regenerate error:", error);
+      toast({
+        title: "错误",
+        description: error.message || "重新生成失败",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header selectedModel={selectedModel} onModelChange={setSelectedModel} />
+      <Header />
 
       <main className="flex-1 flex flex-col pt-16 pb-36">
         <div className="flex-1 overflow-y-auto px-4">
@@ -227,8 +292,13 @@ const Chat = () => {
                 </p>
               </div>
             ) : (
-              messages.map((message) => (
-                <ChatMessage key={message.id} message={message} />
+              messages.map((message, index) => (
+                <ChatMessage 
+                  key={message.id} 
+                  message={message} 
+                  onRegenerate={handleRegenerate}
+                  isLast={index === messages.length - 1 && message.role === "assistant"}
+                />
               ))
             )}
             {isLoading && messages[messages.length - 1]?.role === "user" && (
