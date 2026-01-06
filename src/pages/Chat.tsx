@@ -19,10 +19,12 @@ const Chat = () => {
   const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [conversationTitle, setConversationTitle] = useState("New Chat");
   const [lastUserMessage, setLastUserMessage] = useState<{ message: string; options: { search: boolean; think: boolean } } | null>(null);
   const [initialRequestProcessed, setInitialRequestProcessed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (conversationId) {
@@ -153,6 +155,10 @@ const Chat = () => {
   };
 
   const streamResponse = async (message: string, options: { search: boolean; think: boolean }) => {
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
+    setIsStreaming(true);
+
     // Prepare messages for API
     const apiMessages = messages
       .filter((m) => m.content) // Filter out empty messages
@@ -163,101 +169,121 @@ const Chat = () => {
     
     apiMessages.push({ role: "user", content: message });
 
-    // Stream response
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({ 
-          messages: apiMessages, 
-          model: "glm-4.7",
-          search: options.search,
-          think: options.think,
-        }),
+    try {
+      // Stream response
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ 
+            messages: apiMessages, 
+            model: "glm-4.7",
+            search: options.search,
+            think: options.think,
+          }),
+          signal: abortControllerRef.current.signal,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "获取回复失败");
       }
-    );
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || "获取回复失败");
-    }
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let assistantContent = "";
+      let thinkingContent = "";
+      const assistantId = crypto.randomUUID();
 
-    const reader = response.body?.getReader();
-    const decoder = new TextDecoder();
-    let assistantContent = "";
-    let thinkingContent = "";
-    const assistantId = crypto.randomUUID();
+      // Add empty assistant message
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "", thinking: "" },
+      ]);
 
-    // Add empty assistant message
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantId, role: "assistant", content: "", thinking: "" },
-    ]);
+      let buffer = "";
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    let buffer = "";
-    while (reader) {
-      const { done, value } = await reader.read();
-      if (done) break;
+        buffer += decoder.decode(value, { stream: true });
 
-      buffer += decoder.decode(value, { stream: true });
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
 
-      let newlineIndex: number;
-      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-        let line = buffer.slice(0, newlineIndex);
-        buffer = buffer.slice(newlineIndex + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (line.startsWith(":") || line.trim() === "") continue;
+          if (!line.startsWith("data: ")) continue;
 
-        if (line.endsWith("\r")) line = line.slice(0, -1);
-        if (line.startsWith(":") || line.trim() === "") continue;
-        if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
 
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === "[DONE]") break;
-
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const choices = parsed.choices || [];
-          
-          for (const choice of choices) {
-            const delta = choice.delta || {};
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const choices = parsed.choices || [];
             
-            // Handle thinking content
-            if (delta.reasoning_content) {
-              thinkingContent += delta.reasoning_content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, thinking: thinkingContent } : m
-                )
-              );
+            for (const choice of choices) {
+              const delta = choice.delta || {};
+              
+              // Handle thinking content
+              if (delta.reasoning_content) {
+                thinkingContent += delta.reasoning_content;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId ? { ...m, thinking: thinkingContent } : m
+                  )
+                );
+              }
+              
+              // Handle regular content
+              if (delta.content) {
+                assistantContent += delta.content;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId ? { ...m, content: assistantContent } : m
+                  )
+                );
+              }
             }
-            
-            // Handle regular content
-            if (delta.content) {
-              assistantContent += delta.content;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: assistantContent } : m
-                )
-              );
-            }
+          } catch {
+            buffer = line + "\n" + buffer;
+            break;
           }
-        } catch {
-          buffer = line + "\n" + buffer;
-          break;
         }
       }
-    }
 
-    // Save assistant message to database
-    if (conversationId && assistantContent) {
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        role: "assistant",
-        content: assistantContent,
-      });
+      // Save assistant message to database
+      if (conversationId && assistantContent) {
+        await supabase.from("messages").insert({
+          conversation_id: conversationId,
+          role: "assistant",
+          content: assistantContent,
+        });
+      }
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        console.log("Stream aborted by user");
+        return;
+      }
+      throw error;
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsStreaming(false);
+      setIsLoading(false);
     }
   };
 
@@ -348,7 +374,7 @@ const Chat = () => {
 
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background to-transparent pt-6 pb-6">
         <div className="max-w-3xl mx-auto px-4">
-          <ChatInputBox onSend={handleSend} disabled={isLoading} />
+          <ChatInputBox onSend={handleSend} onStop={handleStop} disabled={isLoading} isStreaming={isStreaming} />
         </div>
       </div>
     </div>
