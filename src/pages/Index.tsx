@@ -76,8 +76,9 @@ const Index = () => {
       <main className="flex-1 flex flex-col items-center justify-center px-4 pt-16 pb-20">
         <div className="w-full max-w-4xl space-y-8">
           {/* Title */}
-          <div className="animate-fade-in-up">
-            <ZaiTitle />
+          <div className="animate-fade-in-up flex flex-col items-center">
+            <ZaiTitle size="lg" />
+            <h2 className="mt-4 text-2xl md:text-3xl text-muted-foreground">有什么可以帮你的？</h2>
           </div>
 
           {/* Chat Input */}
