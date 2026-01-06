@@ -213,14 +213,17 @@ const Chat = () => {
     <div className="min-h-screen flex flex-col bg-background">
       <Header selectedModel={selectedModel} onModelChange={setSelectedModel} />
 
-      <main className="flex-1 flex flex-col pt-16 pb-32">
+      <main className="flex-1 flex flex-col pt-16 pb-36">
         <div className="flex-1 overflow-y-auto px-4">
-          <div className="max-w-3xl mx-auto space-y-6 py-6">
+          <div className="max-w-3xl mx-auto space-y-4 py-6">
             {messages.length === 0 ? (
-              <div className="text-center text-muted-foreground py-20">
-                <p className="text-lg">Start a conversation with Z.ai</p>
-                <p className="text-sm mt-2">
-                  Ask anything - I'm here to help!
+              <div className="text-center py-20">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 mb-4">
+                  <span className="text-3xl">✨</span>
+                </div>
+                <h2 className="text-xl font-semibold text-foreground mb-2">开始与 Z.ai 对话</h2>
+                <p className="text-muted-foreground">
+                  有任何问题都可以问我！
                 </p>
               </div>
             ) : (
@@ -229,9 +232,13 @@ const Chat = () => {
               ))
             )}
             {isLoading && messages[messages.length - 1]?.role === "user" && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Z.ai is thinking...</span>
+              <div className="flex items-center gap-3 text-muted-foreground pl-11">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm">Z.ai 正在思考...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
