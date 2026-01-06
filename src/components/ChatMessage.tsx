@@ -1,7 +1,10 @@
-import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { User, Bot, Copy, Check, RefreshCw, ChevronDown, ChevronUp, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 interface ChatMessageProps {
   message: {
@@ -13,59 +16,163 @@ interface ChatMessageProps {
   isLast?: boolean;
 }
 
-// Simple markdown renderer
-const renderMarkdown = (content: string) => {
-  // Split by code blocks first
-  const parts = content.split(/(```[\s\S]*?```)/g);
-  
-  return parts.map((part, index) => {
-    if (part.startsWith('```') && part.endsWith('```')) {
-      // Code block
-      const codeContent = part.slice(3, -3);
-      const firstNewline = codeContent.indexOf('\n');
-      const language = firstNewline > 0 ? codeContent.slice(0, firstNewline).trim() : '';
-      const code = firstNewline > 0 ? codeContent.slice(firstNewline + 1) : codeContent;
-      
-      return (
-        <pre key={index} className="bg-muted/50 rounded-lg p-3 my-2 overflow-x-auto">
-          {language && (
-            <div className="text-xs text-muted-foreground mb-2 font-mono">{language}</div>
+// Code block component with copy functionality
+const CodeBlock = ({ language, children }: { language: string; children: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(children);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="relative group my-3">
+      <div className="flex items-center justify-between bg-[#282c34] rounded-t-lg px-4 py-2 text-xs">
+        <span className="text-gray-400 font-mono">{language || "code"}</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
+        >
+          {copied ? (
+            <>
+              <Check size={12} />
+              <span>已复制</span>
+            </>
+          ) : (
+            <>
+              <Copy size={12} />
+              <span>复制</span>
+            </>
           )}
-          <code className="text-sm font-mono">{code}</code>
-        </pre>
-      );
-    }
-    
-    // Process inline markdown
-    return (
-      <span key={index}>
-        {part.split('\n').map((line, lineIndex, lines) => {
-          // Bold
-          let processed: React.ReactNode = line.replace(/\*\*(.+?)\*\*/g, (_, text) => `<strong>${text}</strong>`);
+        </button>
+      </div>
+      <SyntaxHighlighter
+        language={language || "text"}
+        style={oneDark}
+        customStyle={{
+          margin: 0,
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderBottomLeftRadius: "0.5rem",
+          borderBottomRightRadius: "0.5rem",
+          fontSize: "0.875rem",
+        }}
+        showLineNumbers={children.split("\n").length > 3}
+        wrapLines
+      >
+        {children}
+      </SyntaxHighlighter>
+    </div>
+  );
+};
+
+// Markdown renderer with code highlighting
+const MarkdownContent = ({ content }: { content: string }) => {
+  return (
+    <div className="prose prose-sm dark:prose-invert max-w-none prose-pre:p-0 prose-pre:bg-transparent prose-code:before:content-none prose-code:after:content-none">
+      <ReactMarkdown
+        components={{
+          code({ className, children, ...props }) {
+          const match = /language-(\w+)/.exec(className || "");
+          const isInline = !match && !className;
           
-          // Handle bullet points
-          if (line.trim().startsWith('* ') || line.trim().startsWith('- ')) {
-            const indent = line.search(/\S/);
-            const bulletContent = line.replace(/^\s*[\*\-]\s+/, '');
+          if (isInline) {
             return (
-              <div key={lineIndex} style={{ paddingLeft: `${indent * 4}px` }} className="flex gap-2 my-0.5">
-                <span className="text-muted-foreground">•</span>
-                <span dangerouslySetInnerHTML={{ __html: bulletContent.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') }} />
-              </div>
+              <code
+                className="px-1.5 py-0.5 rounded bg-muted text-sm font-mono text-foreground"
+                {...props}
+              >
+                {children}
+              </code>
             );
           }
           
-          // Regular line
           return (
-            <span key={lineIndex}>
-              <span dangerouslySetInnerHTML={{ __html: String(processed) }} />
-              {lineIndex < lines.length - 1 && <br />}
-            </span>
+            <CodeBlock language={match ? match[1] : ""}>
+              {String(children).replace(/\n$/, "")}
+            </CodeBlock>
           );
-        })}
-      </span>
-    );
-  });
+        },
+        pre({ children }) {
+          return <>{children}</>;
+        },
+        p({ children }) {
+          return <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>;
+        },
+        ul({ children }) {
+          return <ul className="list-disc pl-4 mb-3 space-y-1">{children}</ul>;
+        },
+        ol({ children }) {
+          return <ol className="list-decimal pl-4 mb-3 space-y-1">{children}</ol>;
+        },
+        li({ children }) {
+          return <li className="leading-relaxed">{children}</li>;
+        },
+        h1({ children }) {
+          return <h1 className="text-xl font-bold mb-3 mt-4 first:mt-0">{children}</h1>;
+        },
+        h2({ children }) {
+          return <h2 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h2>;
+        },
+        h3({ children }) {
+          return <h3 className="text-base font-bold mb-2 mt-3 first:mt-0">{children}</h3>;
+        },
+        blockquote({ children }) {
+          return (
+            <blockquote className="border-l-4 border-primary/50 pl-4 italic text-muted-foreground my-3">
+              {children}
+            </blockquote>
+          );
+        },
+        a({ href, children }) {
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              {children}
+            </a>
+          );
+        },
+        table({ children }) {
+          return (
+            <div className="overflow-x-auto my-3">
+              <table className="min-w-full border border-border rounded-lg overflow-hidden">
+                {children}
+              </table>
+            </div>
+          );
+        },
+        th({ children }) {
+          return (
+            <th className="bg-muted px-3 py-2 text-left font-semibold border-b border-border">
+              {children}
+            </th>
+          );
+        },
+        td({ children }) {
+          return (
+            <td className="px-3 py-2 border-b border-border">{children}</td>
+          );
+        },
+        img({ src, alt }) {
+          return (
+            <img
+              src={src}
+              alt={alt || ""}
+              className="max-w-full h-auto rounded-lg my-3"
+            />
+          );
+        },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
 };
 
 export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps) => {
@@ -113,7 +220,7 @@ export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps)
             </button>
             {thinkingExpanded && (
               <div className="mt-2 p-3 bg-muted/30 rounded-lg border border-border/50 text-sm text-muted-foreground">
-                {renderMarkdown(message.thinking)}
+                <MarkdownContent content={message.thinking} />
               </div>
             )}
           </div>
@@ -134,8 +241,8 @@ export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps)
                 {message.content}
               </div>
             ) : (
-              <div className="text-sm leading-relaxed">
-                {renderMarkdown(message.content)}
+              <div className="text-sm">
+                <MarkdownContent content={message.content} />
               </div>
             )}
           </div>
@@ -180,6 +287,3 @@ export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps)
     </div>
   );
 };
-
-// Import Brain icon at the top
-import { Brain } from "lucide-react";
