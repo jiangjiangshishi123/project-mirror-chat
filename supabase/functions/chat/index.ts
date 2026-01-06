@@ -11,69 +11,133 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, model } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const { messages, model, mode } = await req.json();
+    const ZHIPU_API_KEY = Deno.env.get("ZHIPU_API_KEY");
     
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    if (!ZHIPU_API_KEY) {
+      throw new Error("ZHIPU_API_KEY is not configured");
     }
 
-    // Map model names to Lovable AI Gateway models
+    // Map model names to Zhipu models
     const modelMap: Record<string, string> = {
-      "glm-4.7": "google/gemini-2.5-flash",
-      "glm-4.7-pro": "google/gemini-2.5-pro",
-      "gpt-5": "openai/gpt-5",
-      "gpt-5-mini": "openai/gpt-5-mini",
+      "glm-4.7": "glm-4.7",
+      "glm-4-flash": "glm-4-flash",
+      "glm-4-plus": "glm-4-plus",
+      "glm-4-0520": "glm-4-0520",
     };
 
-    const selectedModel = modelMap[model] || "google/gemini-2.5-flash";
+    const selectedModel = modelMap[model] || "glm-4.7";
 
-    const systemPrompt = `You are Z.ai, a helpful, intelligent, and friendly AI assistant created by Zhipu AI. 
-You are designed to help users with a wide variety of tasks including:
-- Answering questions and providing information
-- Helping with writing, coding, and creative tasks
-- Analyzing and explaining complex topics
-- Providing suggestions and recommendations
+    const systemPrompt = `你是 Z.ai，一个由智谱AI创建的智能、友好的AI助手。
+你可以帮助用户完成各种任务，包括：
+- 回答问题和提供信息
+- 帮助写作、编程和创意任务
+- 分析和解释复杂话题
+- 提供建议和推荐
 
-Always be helpful, accurate, and maintain a professional yet friendly tone. 
-When asked about your capabilities, you can mention that you support:
-- Deep thinking mode for complex reasoning
-- Search mode for finding information
-- Code generation and analysis
-- Creative writing assistance`;
+请始终保持专业而友好的语气，提供准确有用的回答。`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // If search mode, first perform web search
+    let searchContext = "";
+    if (mode === "search") {
+      const lastMessage = messages[messages.length - 1]?.content || "";
+      // Extract actual query from the formatted message
+      const queryMatch = lastMessage.match(/\[Search Mode\].*?: (.+)/);
+      const searchQuery = queryMatch ? queryMatch[1] : lastMessage;
+      
+      console.log("Performing web search for:", searchQuery);
+      
+      try {
+        const searchResponse = await fetch("https://open.bigmodel.cn/api/paas/v4/web_search", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${ZHIPU_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            search_query: searchQuery,
+            search_engine: "search_std",
+            count: 5,
+            content_size: "medium",
+          }),
+        });
+
+        if (searchResponse.ok) {
+          const searchData = await searchResponse.json();
+          console.log("Web search results:", JSON.stringify(searchData).slice(0, 500));
+          
+          if (searchData.search_result && searchData.search_result.length > 0) {
+            searchContext = "\n\n【网络搜索结果】\n" + searchData.search_result.map((r: any, i: number) => 
+              `${i + 1}. ${r.title}\n${r.content}\n来源: ${r.link}`
+            ).join("\n\n");
+          }
+        } else {
+          console.error("Web search failed:", await searchResponse.text());
+        }
+      } catch (searchError) {
+        console.error("Web search error:", searchError);
+      }
+    }
+
+    // Prepare messages with search context
+    const processedMessages = messages.map((m: any, i: number) => {
+      if (i === messages.length - 1 && searchContext) {
+        // Clean up the search mode prefix and add search results
+        let content = m.content.replace(/\[Search Mode\].*?: /, "");
+        return { ...m, content: content + searchContext };
+      }
+      // Clean up any mode prefixes
+      return { ...m, content: m.content.replace(/\[(Deep Think Mode|Search Mode)\].*?: /, "") };
+    });
+
+    // Build request body
+    const requestBody: any = {
+      model: selectedModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...processedMessages,
+      ],
+      stream: true,
+      temperature: 0.7,
+      top_p: 0.95,
+    };
+
+    // Enable thinking mode for deep think
+    if (mode === "think") {
+      requestBody.thinking = {
+        type: "enabled",
+        clear_thinking: false,
+      };
+    }
+
+    console.log("Calling Zhipu API with model:", selectedModel, "mode:", mode);
+
+    const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${ZHIPU_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: selectedModel,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
-        stream: true,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Zhipu API error:", response.status, errorText);
+      
       if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+        return new Response(JSON.stringify({ error: "请求频率过高，请稍后再试。" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required. Please add credits to continue." }), {
-          status: 402,
+      if (response.status === 401) {
+        return new Response(JSON.stringify({ error: "API Key 无效，请检查配置。" }), {
+          status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      return new Response(JSON.stringify({ error: "AI service error" }), {
+      return new Response(JSON.stringify({ error: "AI 服务错误: " + errorText }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -84,7 +148,7 @@ When asked about your capabilities, you can mention that you support:
     });
   } catch (error) {
     console.error("Chat error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "未知错误" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
