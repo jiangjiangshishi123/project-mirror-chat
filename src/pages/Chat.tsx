@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { ChatMessage } from "@/components/ChatMessage";
@@ -16,10 +16,12 @@ interface Message {
 const Chat = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [conversationTitle, setConversationTitle] = useState("New Chat");
   const [lastUserMessage, setLastUserMessage] = useState<{ message: string; options: { search: boolean; think: boolean } } | null>(null);
+  const [initialRequestProcessed, setInitialRequestProcessed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,6 +29,34 @@ const Chat = () => {
       loadConversation();
     }
   }, [conversationId]);
+
+  // Handle initial message from Index page
+  useEffect(() => {
+    const state = location.state as { initialMessage?: string; options?: { search: boolean; think: boolean } } | null;
+    if (state?.initialMessage && !initialRequestProcessed && messages.length > 0) {
+      setInitialRequestProcessed(true);
+      // Clear location state to prevent re-triggering
+      window.history.replaceState({}, document.title);
+      // Trigger the API request for the initial message
+      const triggerInitialRequest = async () => {
+        setLastUserMessage({ message: state.initialMessage!, options: state.options! });
+        setIsLoading(true);
+        try {
+          await streamResponse(state.initialMessage!, state.options!);
+        } catch (error: any) {
+          console.error("Initial chat error:", error);
+          toast({
+            title: "错误",
+            description: error.message || "获取回复失败",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      triggerInitialRequest();
+    }
+  }, [messages, initialRequestProcessed, location.state]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

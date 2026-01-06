@@ -100,7 +100,7 @@ export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps)
 
       {/* Message Content */}
       <div className={cn("flex flex-col gap-1 max-w-[85%]", isUser && "items-end")}>
-        {/* Thinking process for assistant */}
+        {/* Thinking process for assistant - only show if there's thinking content */}
         {!isUser && message.thinking && (
           <div className="w-full mb-2">
             <button
@@ -119,24 +119,27 @@ export const ChatMessage = ({ message, onRegenerate, isLast }: ChatMessageProps)
           </div>
         )}
 
-        <div
-          className={cn(
-            "rounded-2xl px-4 py-3 shadow-sm",
-            isUser
-              ? "bg-primary text-primary-foreground rounded-tr-md"
-              : "bg-card border border-border text-card-foreground rounded-tl-md"
-          )}
-        >
-          {isUser ? (
-            <div className="whitespace-pre-wrap break-words text-sm">
-              {message.content}
-            </div>
-          ) : (
-            <div className="text-sm leading-relaxed">
-              {renderMarkdown(message.content)}
-            </div>
-          )}
-        </div>
+        {/* Only show content box when there's actual content (not during thinking-only phase) */}
+        {(isUser || message.content) && (
+          <div
+            className={cn(
+              "rounded-2xl px-4 py-3 shadow-sm",
+              isUser
+                ? "bg-primary text-primary-foreground rounded-tr-md"
+                : "bg-card border border-border text-card-foreground rounded-tl-md"
+            )}
+          >
+            {isUser ? (
+              <div className="whitespace-pre-wrap break-words text-sm">
+                {message.content}
+              </div>
+            ) : (
+              <div className="text-sm leading-relaxed">
+                {renderMarkdown(message.content)}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action buttons for assistant messages */}
         {!isUser && message.content && (

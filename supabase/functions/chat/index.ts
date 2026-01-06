@@ -89,13 +89,10 @@ serve(async (req) => {
       top_p: 0.95,
     };
 
-    // Enable thinking mode when think is enabled
-    if (think) {
-      requestBody.thinking = {
-        type: "enabled",
-        clear_thinking: false,
-      };
-    }
+    // Control thinking mode based on think flag
+    requestBody.thinking = {
+      type: think ? "enabled" : "disabled",
+    };
 
     console.log("Calling Zhipu API with model:", selectedModel, "search:", search, "think:", think);
 
