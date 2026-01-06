@@ -1,21 +1,58 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ZaiTitle } from "@/components/ZaiTitle";
 import { ChatInput } from "@/components/ChatInput";
 import { FeatureTags } from "@/components/FeatureTags";
 import { Footer } from "@/components/Footer";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedModel, setSelectedModel] = useState("glm-4.7");
 
-  const handleSend = (message: string, mode: "search" | "think") => {
-    toast({
-      title: mode === "search" ? "Search Mode" : "Deep Think Mode",
-      description: `Message: "${message.slice(0, 50)}${message.length > 50 ? '...' : ''}"`,
+  const handleSend = async (message: string, mode: "search" | "think") => {
+    if (!user) {
+      toast({
+        title: "Please sign in",
+        description: "You need to sign in to start a conversation",
+      });
+      navigate("/auth");
+      return;
+    }
+
+    // Create new conversation
+    const { data: conversation, error } = await supabase
+      .from("conversations")
+      .insert({
+        user_id: user.id,
+        title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
+        model: selectedModel,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create conversation",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Add the first message
+    await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      role: "user",
+      content: message,
     });
-    // Here you would integrate with the actual AI API
-    console.log("Sending message:", message, "Mode:", mode);
+
+    // Navigate to chat page
+    navigate(`/chat/${conversation.id}`);
   };
 
   const handleFeatureClick = (featureId: string) => {
