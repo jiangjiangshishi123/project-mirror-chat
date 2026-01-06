@@ -60,9 +60,15 @@ export const ChatInputBox = ({ onSend, disabled }: ChatInputBoxProps) => {
           ref={textareaRef}
           value={message}
           onChange={handleInput}
-          onKeyDown={handleKeyDown}
+          onKeyDown={(e) => {
+            // Only prevent send on Enter when disabled
+            if (e.key === "Enter" && !e.shiftKey && disabled) {
+              e.preventDefault();
+              return;
+            }
+            handleKeyDown(e);
+          }}
           placeholder="向 Z.ai 提问..."
-          disabled={disabled}
           className="min-h-[44px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 p-0 text-base placeholder:text-muted-foreground/60"
           rows={1}
         />

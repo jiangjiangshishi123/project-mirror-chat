@@ -50,8 +50,13 @@ const Index = () => {
       content: message,
     });
 
-    // Navigate to chat page
-    navigate(`/chat/${conversation.id}`);
+    // Navigate to chat page with initial message options
+    navigate(`/chat/${conversation.id}`, { 
+      state: { 
+        initialMessage: message, 
+        options: { search: options.search, think: options.think } 
+      } 
+    });
   };
 
   const handleFeatureClick = (featureId: string) => {
